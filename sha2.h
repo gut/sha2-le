@@ -3,6 +3,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
 #if USE_HW_VECTOR == 1 && !defined(__powerpc64__)
 	#error "HW vector only implemented for powerpc64"
 #endif
@@ -405,19 +409,18 @@ int sha2 (int argc, char *argv[]) {
 	fseek(file, 0, SEEK_END);  // seek to end of file
 	size_t size = ftell(file); // get current file pointer
 	fseek(file, 0, SEEK_SET);  // seek back to beginning of file
+	fclose(file);
 
 	/* Padding. padded_size is total message bytes including pad bytes. */
 	size_t padded_size = calculate_padded_msg_size(size);
 
-	/* Save file in buffer */
-	char input[padded_size];
-	if (fread(input, sizeof(char), size, file) != size) {
-		printf("ERROR\n");
-		return 1;
-	}
-	fclose(file);
+	/* Map the file to a buffer */
+	int fd = open(filename, O_RDONLY);
+	char *input = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 
 	sha2_core(input, size, padded_size, _h);
+
+	close(fd);
 
 	printf(
 #if SHA_BITS == 256
